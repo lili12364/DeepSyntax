@@ -1,0 +1,55 @@
+name: Workflow 2 - Batch 2 (pro6-pro10)
+
+on:
+  workflow_run:
+    workflows: ["Workflow 1 - Batch 1 (pro1-pro5)"]
+    types:
+      - completed
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  scrape-batch-2:
+    runs-on: ubuntu-latest
+    # Only run if the previous workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    strategy:
+      matrix:
+        folder: [pro6, pro7, pro8, pro9, pro10]
+      fail-fast: false  # Continue other jobs even if one fails
+      max-parallel: 5   # Run all 5 in parallel
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps
+      
+      - name: Run scraper for ${{ matrix.folder }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+        run: |
+          python -m ${{ matrix.folder }}.main
+      
+      - name: Upload logs (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.folder }}-batch-2
+          path: |
+            *.log
+            logs/
+          retention-days: 7
+          if-no-files-found: ignore
