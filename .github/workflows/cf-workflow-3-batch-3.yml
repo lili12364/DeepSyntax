@@ -1,0 +1,55 @@
+name: CF - Workflow 3 - Batch 3 (pro11-pro15)
+
+on:
+  workflow_run:
+    workflows: ["CF - Workflow 2 - Batch 2 (pro6-pro10)"]
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  scrape-batch-3:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    strategy:
+      matrix:
+        folder: [pro11, pro12, pro13, pro14, pro15]
+      fail-fast: false
+      max-parallel: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps
+
+      - name: Run scraper for CF/${{ matrix.folder }}
+        env:
+          CF_R2_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+          CF_R2_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+          CF_R2_ENDPOINT_URL: ${{ secrets.CF_R2_ENDPOINT_URL }}
+          CF_R2_BUCKET_NAME: ${{ secrets.CF_R2_BUCKET_NAME }}
+        run: |
+          python -m CF.${{ matrix.folder }}.main
+
+      - name: Upload logs (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cf-logs-${{ matrix.folder }}-batch-3
+          path: |
+            *.log
+            logs/
+          retention-days: 7
+          if-no-files-found: ignore
